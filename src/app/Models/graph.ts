@@ -1,4 +1,4 @@
-export interface NodeConfig {
+export interface Node {
   id: string;
   label: string;
   x: number;
@@ -8,7 +8,7 @@ export interface NodeConfig {
   style: string;
 }
 
-export interface EdgeConfig {
+export interface Edge {
   source: string; 
   target: string; 
   label?: string;

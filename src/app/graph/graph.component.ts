@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnInit, ViewChild, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { NodeConfig, EdgeConfig } from '../Models/graph';
+import { Node, Edge } from '../Models/graph';
 
 @Component({
   selector: 'app-graph',
@@ -35,9 +35,23 @@ export class GraphComponent implements OnInit {
     this.graph = new mxGraph(container);
     new mxRubberband(this.graph);
 
+    // ✅ Allow editing labels
+    this.graph.setCellsEditable(true);
+
+    // ✅ Restrict editing: only allow Progress nodes
+    this.graph.isCellEditable = (cell: any) => {
+      if (cell.vertex && cell.value === 'Progress') {
+        return true;
+      }
+      // Allow editing renamed Progress nodes too
+      if (cell.vertex && typeof cell.value === 'string' && cell.style.includes('fillColor=#2196F3')) {
+        return true;
+      }
+      return false;
+    };
+
     this.initPalette();
 
-    // ✅ Listen for any change (move, resize, connect)
     const listener = () => this.exportGraph();
     this.graph.getModel().addListener(mxEvent.CHANGE, listener);
     this.graph.getSelectionModel().addListener(mxEvent.CHANGE, listener);
@@ -46,35 +60,63 @@ export class GraphComponent implements OnInit {
   initPalette() {
     const graph = this.graph;
 
-    const addVertex = (el: HTMLElement, label: string, style: string, w: number, h: number) => {
+    const addVertex = (
+      el: HTMLElement,
+      label: string,
+      style: string,
+      w: number,
+      h: number,
+      type: 'start' | 'end' | 'progress' | 'generic'
+    ) => {
       const vertex = new mxCell(label, new mxGeometry(0, 0, w, h), style);
       vertex.setVertex(true);
 
       mxUtils.makeDraggable(el, graph, (graph: any, evt: any, cell: any) => {
+        if (type === 'start' && this.hasNode('Start')) {
+          alert('Only one Start node is allowed!');
+          return null;
+        }
+        if (type === 'end' && this.hasNode('End')) {
+          alert('Only one End node is allowed!');
+          return null;
+        }
+
         const pt = graph.getPointForEvent(evt);
         return graph.insertVertex(graph.getDefaultParent(), null, label, pt.x, pt.y, w, h, style);
       });
     };
 
-    // ✅ Start Node
+    // Start
     addVertex(
       document.getElementById('startNode')!,
       'Start',
       'shape=rectangle;fillColor=#4CAF50;fontColor=#FFFFFF;rounded=1;',
       100,
-      40
+      40,
+      'start'
     );
 
-    // ✅ End Node
+    // End
     addVertex(
       document.getElementById('endNode')!,
       'End',
       'shape=rectangle;fillColor=#F44336;fontColor=#FFFFFF;rounded=1;',
       100,
-      40
+      40,
+      'end'
     );
 
-    // ✅ Arrow Edge
+    // Progress (editable)
+    addVertex(
+      document.getElementById('progressNode')!,
+      'Progress',
+      'shape=ellipse;fillColor=#2196F3;fontColor=#FFFFFF;',
+      100,
+      40,
+      'progress'
+    );
+
+    // Arrow edge
     const arrowEl = document.getElementById('arrowEdge')!;
     mxUtils.makeDraggable(
       arrowEl,
@@ -91,13 +133,26 @@ export class GraphComponent implements OnInit {
     );
   }
 
-  // ✅ Export current graph state to JSON
+  hasNode(label: string): boolean {
+    const model = this.graph.getModel();
+    const parent = model.getChildAt(model.getRoot(), 0);
+    const childCount = model.getChildCount(parent);
+
+    for (let i = 0; i < childCount; i++) {
+      const cell = model.getChildAt(parent, i);
+      if (cell.vertex && cell.value === label) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   exportGraph() {
     const model = this.graph.getModel();
     const parent = model.getChildAt(model.getRoot(), 0);
 
-    const nodes: NodeConfig[] = [];
-    const edges: EdgeConfig[] = [];
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
 
     const childCount = model.getChildCount(parent);
 
